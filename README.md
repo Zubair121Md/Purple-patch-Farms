@@ -1,294 +1,258 @@
-# 🍇 Fruit & Vegetable Cost Allocation System v2.0
+# 🍇 Purple Patch Farms - Cost Allocation Dashboard
 
-A **full-featured, production-ready dashboard** for automatically calculating costs and profits for fruit and vegetable businesses. This system provides comprehensive analytics, interactive charts, and advanced cost allocation algorithms.
+A comprehensive, professional cost allocation system for fruit and vegetable farming operations, built with FastAPI and modern web technologies.
+
+![Purple Patch Farms Logo](PP.jpg)
 
 ## ✨ Features
 
-### 🎯 **Core Functionality**
-- **Product Management**: Track inhouse and outsourced products with full CRUD operations
-- **Monthly Sales Tracking**: Record quantities, prices, and direct costs with validation
-- **Cost Management**: Handle various cost types with categorization and allocation rules
-- **Automatic Allocation**: Advanced algorithms for fair cost distribution
-- **Comprehensive Reporting**: Detailed analytics with export capabilities
+### 🎯 Core Functionality
+- **Product Management**: Track inhouse and outsourced products with detailed categorization
+- **Sales Tracking**: Monthly sales data with comprehensive revenue calculations
+- **Cost Management**: Advanced cost tracking with multiple allocation methods
+- **Smart Allocation**: Automatic cost distribution based on weight, value, or trips
+- **Real-time Analytics**: Live dashboard with interactive charts and insights
+- **Export Functionality**: Generate detailed CSV reports for any month
+- **Database Reset**: Complete data reset functionality for testing
 
-### 📊 **Dashboard & Analytics**
-- **Real-time Statistics**: Live updates of revenue, costs, and profits
-- **Interactive Charts**: Revenue vs costs, source distribution, and trend analysis
-- **Top Products Analysis**: Rank products by profitability and performance
-- **Source-wise Breakdown**: Separate analytics for inhouse vs outsourced products
-- **Cost Breakdown**: Category-wise cost analysis and insights
-
-### 🚀 **Advanced Features**
-- **Modern UI/UX**: Responsive design with dark/light themes
-- **Data Validation**: Comprehensive input validation and error handling
-- **Export Functionality**: CSV export for reports and data analysis
-- **Real-time Updates**: Live data refresh and synchronization
-- **Mobile Responsive**: Works perfectly on desktop, tablet, and mobile
-
-### 🔧 **Technical Excellence**
-- **DSA Optimizations**: HashMap lookups, efficient algorithms, and performance tuning
-- **RESTful API**: Clean, well-documented API endpoints
-- **Database Design**: Normalized schema with proper relationships
-- **Error Handling**: Comprehensive error management and user feedback
-- **Security**: Input validation, SQL injection protection, and data sanitization
-
-## 🏗️ Architecture
-
-```
-purple/
-├── backend/
-│   ├── app.py              # FastAPI backend server
-│   └── requirements.txt    # Python dependencies
-├── frontend/
-│   └── index.html          # Modern dashboard UI
-├── static/
-│   ├── css/               # Stylesheets
-│   ├── js/
-│   │   └── dashboard.js   # Dashboard functionality
-│   └── exports/           # Generated reports
-├── start.py               # One-click startup script
-└── README.md              # This file
-```
+### 🎨 Professional UI
+- **Modern Design**: Clean, professional interface with Purple Patch Farms branding
+- **Collapsible Sidebar**: Space-efficient navigation with smooth animations
+- **Responsive Layout**: Works perfectly on desktop and mobile devices
+- **Interactive Charts**: Beautiful visualizations using Chart.js
+- **Professional Typography**: Inter font family for modern, clean text
 
 ## 🚀 Quick Start
 
-### **Option 1: One-Click Start (Recommended)**
-```bash
-python start.py
+### Prerequisites
+- Python 3.8 or higher
+- pip (Python package manager)
+
+### Installation
+
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/Zubair121Md/Purple-patch-Farms.git
+   cd Purple-patch-Farms
+   ```
+
+2. **Install Dependencies**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+3. **Run the Application**:
+   ```bash
+   python app.py
+   ```
+
+4. **Access the Dashboard**:
+   - Open your browser and go to `http://localhost:8000`
+   - API documentation available at `http://localhost:8000/api/docs`
+
+## 📁 Project Structure
+
 ```
-This will:
-- Install all dependencies
-- Start the server
-- Open your browser automatically
-- Show you the dashboard
-
-### **Option 2: Manual Setup**
-```bash
-# Install dependencies
-pip install -r backend/requirements.txt
-
-# Start the server
-cd backend
-python app.py
-
-# Open browser to http://localhost:8000
+Purple-patch-Farms/
+├── backend/
+│   ├── app.py                    # Main FastAPI application
+│   ├── index.html               # Professional frontend dashboard
+│   ├── requirements.txt         # Python dependencies
+│   └── static/
+│       ├── js/
+│       │   └── dashboard.js     # Frontend JavaScript with full functionality
+│       ├── images/
+│       │   └── PP.jpg          # Company logo
+│       └── exports/             # Generated reports
+├── frontend/                    # Alternative frontend (if needed)
+├── PP.jpg                      # Company logo
+├── .gitignore                  # Git ignore file
+└── README.md                   # This file
 ```
 
-## 🌐 Access Points
+## 🔌 API Endpoints
 
-- **Main Dashboard**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/api/docs
-- **API Health Check**: http://localhost:8000/api/health
-
-## 📱 Dashboard Features
-
-### **1. Dashboard Tab**
-- Real-time statistics cards
-- Interactive revenue vs costs chart
-- Source distribution pie chart
-- Top products by profitability
-- Quick action buttons
-
-### **2. Products Management**
-- Add/edit/delete products
-- Source categorization (inhouse/outsourced)
-- Status management (active/inactive)
-- Bulk operations support
-
-### **3. Sales Data**
-- Monthly sales entry
-- Product selection with validation
-- Quantity and pricing management
-- Direct cost tracking
-
-### **4. Cost Management**
-- Multiple cost categories
-- Flexible allocation rules
-- Cost type classification
-- Monthly cost tracking
-
-### **5. Cost Allocation**
-- One-click allocation execution
-- Real-time calculation results
-- Detailed allocation breakdown
-- Profit analysis per product
-
-### **6. Reports & Analytics**
-- Comprehensive monthly reports
-- Export to CSV functionality
-- Interactive data visualization
-- Performance metrics
-
-## 🔧 API Endpoints
-
-### **Dashboard**
-- `GET /api/dashboard/stats` - Get dashboard statistics
-- `GET /api/health` - Health check
-
-### **Products**
-- `GET /api/products/` - List all products
-- `POST /api/products/` - Create product
-- `GET /api/products/{id}` - Get product by ID
+### Products Management
+- `GET /api/products` - List all products
+- `POST /api/products` - Create new product
 - `PUT /api/products/{id}` - Update product
 - `DELETE /api/products/{id}` - Delete product
 
-### **Sales**
-- `GET /api/monthly-sales/{month}` - Get sales for month
-- `POST /api/monthly-sales/` - Create sales record
+### Sales Tracking
+- `GET /api/monthly-sales` - List all sales records
+- `POST /api/monthly-sales` - Create new sales record
+- `GET /api/monthly-sales/{month}` - Get sales by specific month
 - `PUT /api/monthly-sales/{id}` - Update sales record
+- `DELETE /api/monthly-sales/{id}` - Delete sales record
 
-### **Costs**
-- `GET /api/costs/{month}` - Get costs for month
-- `POST /api/costs/` - Create cost
-- `PUT /api/costs/{id}` - Update cost
-- `DELETE /api/costs/{id}` - Delete cost
+### Cost Management
+- `GET /api/costs` - List all costs
+- `POST /api/costs` - Create new cost entry
+- `GET /api/costs/{month}` - Get costs by specific month
+- `PUT /api/costs/{id}` - Update cost entry
+- `DELETE /api/costs/{id}` - Delete cost entry
 
-### **Allocation & Reports**
-- `POST /api/allocate/{month}` - Run cost allocation
-- `GET /api/report/{month}` - Get monthly report
-- `GET /api/export/{month}/csv` - Export report as CSV
+### Dashboard & Analytics
+- `GET /api/dashboard/stats` - Get comprehensive dashboard statistics
+- `GET /api/allocate/{month}` - Get detailed cost allocation for specific month
+- `GET /api/export/{month}/csv` - Export monthly report as CSV
+- `POST /api/reset-database` - Reset entire database (for testing)
 
-## 🧮 Cost Allocation Algorithm
+## 🧮 Cost Allocation Logic
 
-The system uses sophisticated algorithms for fair cost distribution:
+The system uses sophisticated algorithms to automatically allocate costs based on:
 
-### **1. Product Filtering**
-- Determines which products are affected by each cost
-- Supports multiple filter criteria (inhouse, outsourced, both, all)
+### 1. Product Source Classification
+- **Inhouse**: Products grown on your own farm
+- **Outsourced**: Products purchased from external suppliers
 
-### **2. Basis Calculation**
-- **Weight-based**: Allocates based on product quantities
-- **Value-based**: Allocates based on revenue (quantity × price)
-- **Trip-based**: Allocates based on transportation needs
+### 2. Cost Type Categories
+- `purchase-only`: Costs that only apply to outsourced products
+- `sales-only`: Costs related to sales and distribution activities
+- `common`: Shared costs between inhouse and outsourced products
+- `inhouse-only`: Costs specific to inhouse production
 
-### **3. Proportional Allocation**
+### 3. Allocation Methods
+- **Weight-based**: Allocate costs based on product weight
+- **Value-based**: Allocate costs based on product value
+- **Trip-based**: Allocate costs based on number of trips
+
+### 4. Cost Categories
+- Market fees, electricity, staff salaries
+- Distribution charges across multiple cities
+- Repair & maintenance costs
+- Transportation and logistics
+- Marketing and miscellaneous expenses
+
+## 🛠️ Technologies Used
+
+### Backend
+- **FastAPI**: Modern, fast web framework for building APIs
+- **SQLAlchemy**: Powerful ORM for database operations
+- **SQLite**: Lightweight, serverless database
+- **Pydantic**: Data validation and serialization
+
+### Frontend
+- **HTML5 & CSS3**: Modern web standards
+- **JavaScript (ES6+)**: Interactive functionality
+- **Chart.js**: Beautiful, responsive charts
+- **Font Awesome**: Professional icons
+- **Inter Font**: Modern typography
+
+### Development Tools
+- **Git**: Version control
+- **GitHub**: Code repository and collaboration
+- **Python 3.8+**: Programming language
+
+## 📊 Dashboard Features
+
+### Main Dashboard
+- **Key Metrics**: Total products, revenue, costs, and profit
+- **Interactive Charts**: Revenue vs costs, source distribution
+- **Real-time Updates**: Live data refresh functionality
+- **Professional Design**: Clean, modern interface
+
+### Navigation
+- **Collapsible Sidebar**: Space-efficient navigation
+- **Tab-based Interface**: Easy switching between sections
+- **Professional Branding**: Purple Patch Farms logo and colors
+
+### Data Management
+- **CRUD Operations**: Full create, read, update, delete functionality
+- **Form Validation**: Client and server-side validation
+- **Error Handling**: Comprehensive error management
+- **Success Notifications**: User-friendly feedback
+
+## 🔧 Development
+
+### Adding New Features
+
+1. **Backend Changes**: Modify `backend/app.py`
+2. **Frontend Changes**: Update `backend/index.html` and `backend/static/js/dashboard.js`
+3. **Testing**: Run the application and test your changes
+
+### Database Schema
+
+#### Products Table
+- `id`: Primary key
+- `name`: Product name
+- `source`: 'inhouse' or 'outsourced'
+- `unit`: Measurement unit (default: 'kg')
+- `extra_info`: Additional product information
+
+#### Monthly Sales Table
+- `id`: Primary key
+- `product_id`: Foreign key to products
+- `quantity`: Sales quantity
+- `sale_price`: Price per unit
+- `direct_cost`: Direct cost per unit
+- `month`: Sales month (YYYY-MM format)
+
+#### Costs Table
+- `id`: Primary key
+- `name`: Cost description
+- `amount`: Cost amount
+- `applies_to`: 'inhouse', 'outsourced', 'both', or 'all'
+- `cost_type`: 'purchase-only', 'sales-only', 'common', or 'inhouse-only'
+- `basis`: 'weight', 'value', or 'trips'
+- `month`: Cost month (YYYY-MM format)
+- `is_fixed`: 'fixed' or 'variable'
+- `category`: Cost category
+
+## 📈 Usage Examples
+
+### Adding a New Product
+```json
+{
+  "name": "Organic Tomatoes",
+  "source": "inhouse",
+  "unit": "kg",
+  "extra_info": "Premium organic tomatoes"
+}
 ```
-allocation = (product_basis / total_basis) × cost_amount
+
+### Recording Sales
+```json
+{
+  "product_id": 1,
+  "quantity": 100.5,
+  "sale_price": 45.50,
+  "direct_cost": 25.00,
+  "month": "2024-04"
+}
 ```
 
-### **4. DSA Optimizations**
-- O(1) product lookups using HashMap
-- Efficient batch processing
-- Sorted results for quick insights
-- Memory-optimized data structures
-
-## 📊 Example Calculation
-
-**Input Data:**
-- Strawberry: 10kg @ ₹200/kg (outsourced)
-- Banana: 25kg @ ₹150/kg (outsourced)  
-- Apple: 30kg @ ₹100/kg (inhouse)
-
-**Costs:**
-- Purchase Loading: ₹300 (outsourced only, weight-based)
-- Sales Loading: ₹700 (all products, weight-based)
-
-**Allocation Results:**
-- **Purchase Loading (₹300)**:
-  - Strawberry: ₹85.71 (10/35 × 300)
-  - Banana: ₹214.29 (25/35 × 300)
-
-- **Sales Loading (₹700)**:
-  - Strawberry: ₹107.69 (10/65 × 700)
-  - Banana: ₹269.23 (25/65 × 700)
-  - Apple: ₹323.08 (30/65 × 700)
-
-## 🎨 UI/UX Features
-
-### **Modern Design**
-- Clean, professional interface
-- Intuitive navigation
-- Responsive grid layouts
-- Smooth animations and transitions
-
-### **Interactive Elements**
-- Real-time form validation
-- Dynamic charts and graphs
-- Modal dialogs for data entry
-- Toast notifications for feedback
-
-### **Data Visualization**
-- Revenue vs costs bar chart
-- Source distribution pie chart
-- Profitability rankings
-- Trend analysis graphs
-
-## 🔒 Security Features
-
-- Input validation and sanitization
-- SQL injection protection
-- XSS prevention
-- CORS configuration
-- Error handling without data exposure
-
-## 📈 Performance Optimizations
-
-- **Database**: Indexed queries, efficient joins
-- **Frontend**: Lazy loading, optimized rendering
-- **API**: Caching, batch operations
-- **Charts**: Canvas-based rendering for smooth performance
-
-## 🛠️ Development
-
-### **Backend Development**
-```bash
-cd backend
-python app.py  # Starts with auto-reload
+### Adding Costs
+```json
+{
+  "name": "Electricity Bill",
+  "amount": 5000.00,
+  "applies_to": "all",
+  "cost_type": "common",
+  "basis": "value",
+  "month": "2024-04",
+  "is_fixed": "variable",
+  "category": "utilities"
+}
 ```
 
-### **Frontend Development**
-- Edit `frontend/index.html` for UI changes
-- Edit `static/js/dashboard.js` for functionality
-- CSS is embedded in HTML for simplicity
+## 🤝 Contributing
 
-### **Database Management**
-- SQLite database: `backend/fruit_vegetable_costs.db`
-- Tables: products, monthly_sales, costs, allocations, users
-- Automatic migrations on startup
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📋 System Requirements
+## 📝 License
 
-- **Python**: 3.8 or higher
-- **Memory**: 512MB RAM minimum
-- **Storage**: 100MB for application + data
-- **Browser**: Modern browser with JavaScript enabled
-
-## 🚀 Deployment
-
-### **Local Development**
-```bash
-python start.py
-```
-
-### **Production Deployment**
-1. Install dependencies: `pip install -r backend/requirements.txt`
-2. Configure environment variables
-3. Set up reverse proxy (nginx)
-4. Use process manager (PM2, systemd)
-5. Configure SSL certificates
+This project is proprietary to Purple Patch Farms. All rights reserved.
 
 ## 📞 Support
 
-- **Documentation**: See API docs at `/api/docs`
-- **Issues**: Check console for error messages
-- **Health Check**: Visit `/api/health`
-
-## 🎯 Roadmap
-
-- [ ] User authentication and authorization
-- [ ] Multi-tenant support
-- [ ] Advanced reporting with PDF export
-- [ ] Mobile app (React Native)
-- [ ] Real-time notifications
-- [ ] Integration with accounting software
-- [ ] Machine learning for cost prediction
-
-## 📄 License
-
-This project is open source and available under the MIT License.
+For support and questions, please contact the development team or create an issue in the GitHub repository.
 
 ---
 
-**Built with ❤️ using FastAPI, SQLAlchemy, Chart.js, and modern web technologies**
-
-**Version 2.0.0 - Full-Featured Dashboard Edition**
+**Purple Patch Farms** - Growing Excellence, One Harvest at a Time 🌱
