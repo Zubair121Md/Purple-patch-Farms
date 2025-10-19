@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purple Patch Farms - Cost Allocation Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2240%22 fill=%22%238B5CF6%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22white%22 font-size=%2220%22 font-family=%22Arial%22>P</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #8B5CF6;
+            --secondary-color: #10B981;
+            --accent-color: #F59E0B;
+            --danger-color: #EF4444;
+            --warning-color: #F59E0B;
+            --info-color: #3B82F6;
+            --light-bg: #f8fafc;
+            --dark-text: #1e293b;
+            --light-text: #64748b;
+            --border-color: #e2e8f0;
+            --shadow: 0 2px 10px rgba(0,0,0,0.05);
+            --shadow-lg: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            color: var(--dark-text);
+            font-weight: 400;
+            line-height: 1.6;
+        }
+        
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(180deg, #581C87 0%, #4C1D95 50%, #312E81 100%);
+            color: white;
+            padding: 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 1000;
+            transition: width 0.3s ease;
+            border-right: 2px solid rgba(139, 92, 246, 0.3);
+        }
+        
+        .sidebar.collapsed {
+            width: 80px;
+        }
+        
+        .sidebar.collapsed .nav-item span {
+            opacity: 0;
+            transform: translateX(-20px);
+            width: 0;
+            overflow: hidden;
+        }
+        
+        .sidebar.collapsed .nav-item {
+            justify-content: center;
+            padding: 16px 20px;
+        }
+        
+        .sidebar.collapsed .nav-item i {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        
+        .sidebar.collapsed .sidebar-header {
+            padding: 20px 10px;
+        }
+        
+        .sidebar.collapsed .logo-text {
+            display: none;
+        }
+        
+        .sidebar-toggle {
+            position: absolute;
+            bottom: 20px;
+            right: -15px;
+            width: 30px;
+            height: 30px;
+            background: #6B21A8;
+            border: 3px solid white;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            transition: all 0.3s ease;
+            z-index: 1001;
+            font-size: 12px;
+        }
+        
+        .sidebar-toggle:hover {
+            background: #7C3AED;
+            transform: scale(1.15);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        }
+        
+        .sidebar-toggle i {
+            transition: transform 0.3s ease;
+            font-size: 12px;
+        }
+        
+        .sidebar.collapsed .sidebar-toggle {
+            right: -15px;
+        }
+        
+        .sidebar.collapsed .sidebar-toggle i {
+            transform: rotate(180deg);
+        }
+        
+        .sidebar-header {
+            padding: 30px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+        
+        .logo-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: #8B5CF6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            margin-bottom: 8px;
+        }
+        
+        .logo-text {
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .company-name {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: white;
+            margin: 0;
+            line-height: 1.1;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .company-name .purple {
+            display: block;
+        }
+        
+        .company-name .patch {
+            display: block;
+            margin-left: 8px;
+        }
+        
+        .company-tagline {
+            font-size: 0.75em;
+            color: #A78BFA;
+            margin: 4px 0 0 0;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        
+        .sidebar.collapsed .logo-text {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        
+        .sidebar.collapsed .logo-container {
+            gap: 0;
+        }
+        
+        .sidebar.collapsed .logo-icon {
+            margin-bottom: 0;
+        }
+        
+        .sidebar-nav {
+            padding: 20px 0;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px 28px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 4px solid transparent;
+            position: relative;
+            font-weight: 500;
+            font-size: 0.95em;
+            margin: 3px 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        .nav-item i {
+            width: 22px;
+            text-align: center;
+            font-size: 1.2em;
+            opacity: 0.9;
+            color: #A78BFA;
+        }
+        
+        .nav-item:hover {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+            border-left-color: #A78BFA;
+            color: white;
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+        }
+        
+        .nav-item:hover i {
+            opacity: 1;
+            color: #8B5CF6;
+        }
+        
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border-left-color: #8B5CF6;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.2);
+            transform: translateX(3px);
+        }
+        
+        .nav-item.active i {
+            opacity: 1;
+            color: #8B5CF6;
+        }
+        
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            background: linear-gradient(45deg, #8B5CF6, #A78BFA);
+            border-radius: 50%;
+            box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            background: var(--light-bg);
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+        }
+        
+        .main-content.sidebar-collapsed {
+            margin-left: 80px;
+        }
+        
+        .top-bar {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .page-title h2 {
+            color: #1e293b;
+            font-size: 1.8em;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .page-subtitle {
+            color: #64748b;
+            font-size: 0.9em;
+            margin: 0;
+        }
+        
+        .current-month {
+            background: #8B5CF6;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .content-area {
+            padding: 30px;
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Dashboard Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 32px 24px;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #f1f5f9;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #8B5CF6, #10B981);
+        }
+        
+        .stat-card.revenue::before { background: linear-gradient(90deg, #3B82F6, #1E40AF); }
+        .stat-card.costs::before { background: linear-gradient(90deg, #EF4444, #B91C1C); }
+        .stat-card.profit::before { background: linear-gradient(90deg, #10B981, #047857); }
+        .stat-card.products::before { background: linear-gradient(90deg, #F59E0B, #D97706); }
+        
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .stat-title {
+            font-size: 0.9em;
+            color: var(--light-text);
+            font-weight: 600;
+        }
+        
+        .stat-icon {
+            font-size: 1.5em;
+            opacity: 0.8;
+        }
+        
+        .stat-card.revenue .stat-icon { color: #3B82F6; }
+        .stat-card.costs .stat-icon { color: #EF4444; }
+        .stat-card.profit .stat-icon { color: #10B981; }
+        .stat-card.products .stat-icon { color: #F59E0B; }
+        
+        .stat-value {
+            font-size: 2.4em;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+        }
+        
+        .stat-change {
+            font-size: 0.85em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .stat-change.positive {
+            color: var(--primary-color);
+        }
+        
+        .stat-change.negative {
+            color: var(--danger-color);
+        }
+        
+        /* Charts Container */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Tables */
+        .table-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        
+        .table-header {
+            padding: 25px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .table-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .table-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: var(--light-bg);
+            color: var(--dark-text);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+        
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8em;
+        }
+        
+        /* Tables */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table th {
+            background: var(--light-bg);
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--dark-text);
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .table td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .table tr:hover {
+            background: var(--light-bg);
+        }
+        
+        /* Forms */
+        .form-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+        }
+        
+        .form-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .form-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: var(--shadow-lg);
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        
+        .form-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: var(--light-text);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark-text);
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        /* Alerts */
+        .alert {
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--light-text);
+        }
+        
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Hidden class */
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <div class="logo-icon">
+                        <img src="/static/images/PP.jpg" alt="Purple Patch Farms" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                    </div>
+                    <div class="logo-text">
+                        <div class="company-name">
+                            <span class="purple">purple</span>
+                            <span class="patch">patch</span>
+                        </div>
+                        <div class="company-tagline">FARMS</div>
+                    </div>
+                </div>
+                <button class="sidebar-toggle" onclick="toggleSidebar()">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+            <div class="sidebar-nav">
+                <a href="#" class="nav-item active" data-tab="dashboard">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="products">
+                    <i class="fas fa-boxes"></i>
+                    <span>Products</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="sales">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Sales</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="costs">
+                    <i class="fas fa-receipt"></i>
+                    <span>Costs</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="allocation">
+                    <i class="fas fa-percentage"></i>
+                    <span>Allocation</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="reports">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Reports</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="settings">
+                    <i class="fas fa-sliders-h"></i>
+                    <span>Settings</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="top-bar">
+                <div class="page-title">
+                    <h2 id="page-title">Dashboard</h2>
+                    <p class="page-subtitle" id="page-subtitle">Overview & Analytics</p>
+                </div>
+                <div class="user-info">
+                    <span class="current-month" id="current-month">Current Month: 2025-10</span>
+                    <button class="btn btn-primary" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Dashboard Tab -->
+                <div id="dashboard" class="tab-content active">
+                    <div class="stats-grid" id="stats-grid">
+                        <!-- Stats will be loaded here -->
+                    </div>
+                    
+                    <div class="charts-container">
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3 class="chart-title">Revenue vs Costs</h3>
+                                <select id="chart-period" class="btn btn-secondary">
+                                    <option value="2025-10">October 2025</option>
+                                </select>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="revenueChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3 class="chart-title">Source Distribution</h3>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="sourceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Top Products by Profit</h3>
+                            <div class="table-actions">
+                                <button class="btn btn-primary" onclick="showTab('products')">
+                                    <i class="fas fa-plus"></i>
+                                    Add Product
+                                </button>
+                            </div>
+                        </div>
+                        <div id="top-products-table">
+                            <!-- Table will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Products Tab -->
+                <div id="products" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Products Management</h3>
+                            <div class="table-actions">
+                                <button class="btn btn-primary" onclick="showProductForm()">
+                                    <i class="fas fa-plus"></i>
+                                    Add Product
+                                </button>
+                            </div>
+                        </div>
+                        <div id="products-table">
+                            <!-- Table will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sales Tab -->
+                <div id="sales" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Monthly Sales Data</h3>
+                            <div class="table-actions">
+                                <button class="btn btn-primary" onclick="showSalesForm()">
+                                    <i class="fas fa-plus"></i>
+                                    Add Sales
+                                </button>
+                                <select id="sales-month-filter" class="btn btn-secondary">
+                                    <option value="2025-10">October 2025</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="sales-table">
+                            <!-- Table will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Costs Tab -->
+                <div id="costs" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Cost Management</h3>
+                            <div class="table-actions">
+                                <button class="btn btn-primary" onclick="showCostForm()">
+                                    <i class="fas fa-plus"></i>
+                                    Add Cost
+                                </button>
+                                <select id="costs-month-filter" class="btn btn-secondary">
+                                    <option value="2025-10">October 2025</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="costs-table">
+                            <!-- Table will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Allocation Tab -->
+                <div id="allocation" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Cost Allocation</h3>
+                            <div class="table-actions">
+                                <select id="allocation-month" class="btn btn-secondary">
+                                    <option value="2025-10">October 2025</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="runAllocation()">
+                                    <i class="fas fa-calculator"></i>
+                                    Run Allocation
+                                </button>
+                            </div>
+                        </div>
+                        <div id="allocation-results">
+                            <!-- Results will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Tab -->
+                <div id="reports" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">Monthly Reports</h3>
+                            <div class="table-actions">
+                                <select id="report-month" class="btn btn-secondary">
+                                    <option value="2025-10">October 2025</option>
+                                </select>
+                                <button class="btn btn-primary" onclick="generateReport()">
+                                    <i class="fas fa-file-alt"></i>
+                                    Generate Report
+                                </button>
+                                <button class="btn btn-secondary" onclick="exportReport()">
+                                    <i class="fas fa-download"></i>
+                                    Export CSV
+                                </button>
+                            </div>
+                        </div>
+                        <div id="report-results">
+                            <!-- Report will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings" class="tab-content">
+                    <div class="table-card">
+                        <div class="table-header">
+                            <h3 class="table-title">System Settings</h3>
+                        </div>
+                        <div style="padding: 25px;">
+                            <div class="form-group">
+                                <label>Default Month</label>
+                                <input type="text" id="default-month" value="2025-10" placeholder="YYYY-MM">
+                            </div>
+                            <div class="form-group">
+                                <label>Currency</label>
+                                <select id="currency">
+                                    <option value="₹">₹ (Rupees)</option>
+                                    <option value="$">$ (Dollars)</option>
+                                    <option value="€">€ (Euros)</option>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 15px; margin-top: 20px;">
+                                <button class="btn btn-primary" onclick="saveSettings()">
+                                    <i class="fas fa-save"></i>
+                                    Save Settings
+                                </button>
+                                <button class="btn btn-danger" onclick="resetDatabase()" style="background: linear-gradient(135deg, #EF4444, #DC2626);">
+                                    <i class="fas fa-trash-alt"></i>
+                                    Reset Database
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Product Form Modal -->
+    <div id="product-modal" class="form-modal">
+        <div class="form-container">
+            <div class="form-header">
+                <h3 class="form-title" id="product-modal-title">Add Product</h3>
+                <button class="close-btn" onclick="closeModal('product-modal')">&times;</button>
+            </div>
+            <form id="product-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="product-name">Product Name</label>
+                        <input type="text" id="product-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="product-source">Source</label>
+                        <select id="product-source" required>
+                            <option value="">Select Source</option>
+                            <option value="inhouse">Inhouse</option>
+                            <option value="outsourced">Outsourced</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="product-unit">Unit</label>
+                        <input type="text" id="product-unit" value="kg" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="product-info">Extra Info</label>
+                        <input type="text" id="product-info" placeholder="Optional">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('product-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Product</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sales Form Modal -->
+    <div id="sales-modal" class="form-modal">
+        <div class="form-container">
+            <div class="form-header">
+                <h3 class="form-title" id="sales-modal-title">Add Sales Data</h3>
+                <button class="close-btn" onclick="closeModal('sales-modal')">&times;</button>
+            </div>
+            <form id="sales-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sales-product">Product</label>
+                        <select id="sales-product" required>
+                            <option value="">Select Product</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sales-month">Month</label>
+                        <input type="text" id="sales-month" placeholder="2025-10" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sales-quantity">Quantity (kg)</label>
+                        <input type="number" id="sales-quantity" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sales-price">Sale Price (₹)</label>
+                        <input type="number" id="sales-price" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="sales-direct-cost">Direct Cost (₹)</label>
+                    <input type="number" id="sales-direct-cost" step="0.01" value="0">
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('sales-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Sales Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cost Form Modal -->
+    <div id="cost-modal" class="form-modal">
+        <div class="form-container">
+            <div class="form-header">
+                <h3 class="form-title" id="cost-modal-title">Add Cost</h3>
+                <button class="close-btn" onclick="closeModal('cost-modal')">&times;</button>
+            </div>
+            <form id="cost-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cost-name">Cost Name</label>
+                        <input type="text" id="cost-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cost-amount">Amount (₹)</label>
+                        <input type="number" id="cost-amount" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cost-applies-to">Applies To</label>
+                        <select id="cost-applies-to" required>
+                            <option value="">Select Applicability</option>
+                            <option value="inhouse">Inhouse Only</option>
+                            <option value="outsourced">Outsourced Only</option>
+                            <option value="both">Both Inhouse & Outsourced</option>
+                            <option value="all">All Products</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cost-type">Cost Type</label>
+                        <select id="cost-type" required>
+                            <option value="">Select Type</option>
+                            <option value="purchase-only">Purchase Only</option>
+                            <option value="sales-only">Sales Only</option>
+                            <option value="common">Common</option>
+                            <option value="inhouse-only">Inhouse Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cost-basis">Allocation Basis</label>
+                        <select id="cost-basis" required>
+                            <option value="">Select Basis</option>
+                            <option value="weight">Weight</option>
+                            <option value="value">Value</option>
+                            <option value="trips">Trips</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cost-month">Month</label>
+                        <input type="text" id="cost-month" placeholder="2025-10" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cost-category">Category</label>
+                        <select id="cost-category">
+                            <option value="general">General</option>
+                            <option value="transport">Transport</option>
+                            <option value="marketing">Marketing</option>
+                            <option value="storage">Storage</option>
+                            <option value="labor">Labor</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cost-fixed">Type</label>
+                        <select id="cost-fixed">
+                            <option value="variable">Variable</option>
+                            <option value="fixed">Fixed</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('cost-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Cost</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="static/js/dashboard.js"></script>
+</body>
+</html>
