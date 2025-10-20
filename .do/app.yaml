@@ -1,0 +1,13 @@
+name: purple-patch-farms
+services:
+- name: web
+  source_dir: backend
+  github:
+    repo: Zubair121Md/Purple-patch-Farms
+    branch: master
+  run_command: python app.py
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /
