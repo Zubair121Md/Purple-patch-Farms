@@ -14,10 +14,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize dashboard components
 function initializeDashboard() {
-    // Set current month
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    document.getElementById('current-month').textContent = `Current Month: ${currentMonth}`;
-    
     // Initialize charts
     initializeCharts();
     
@@ -43,9 +39,7 @@ function setupEventListeners() {
     document.getElementById('sales-form').addEventListener('submit', handleSalesSubmit);
     document.getElementById('cost-form').addEventListener('submit', handleCostSubmit);
     
-    // Month filters
-    document.getElementById('sales-month-filter').addEventListener('change', loadSales);
-    document.getElementById('costs-month-filter').addEventListener('change', loadCosts);
+    // Month filters removed - now using all data
 }
 
 // Tab switching
@@ -74,6 +68,7 @@ function showTab(tabName) {
         'costs': { title: 'Costs', subtitle: 'Manage Operational Costs' },
         'allocation': { title: 'Allocation', subtitle: 'Cost Distribution Analysis' },
         'reports': { title: 'Reports', subtitle: 'Generate & Export Reports' },
+        'excel-upload': { title: 'Excel Upload', subtitle: 'Import Data from Excel Files' },
         'settings': { title: 'Settings', subtitle: 'System Configuration' }
     };
     
@@ -178,11 +173,30 @@ function displayDashboardStats(stats) {
 // Load top products
 async function loadTopProducts() {
     try {
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        const response = await fetch(`${API_BASE}/report/${currentMonth}`);
-        const report = await response.json();
+        // Get all sales data instead of month-based report
+        const response = await fetch(`${API_BASE}/sales`);
+        const sales = await response.json();
         
-        displayTopProducts(report.top_products || []);
+        // Calculate top products from all sales data
+        const productStats = {};
+        sales.forEach(sale => {
+            const productName = sale.product_name;
+            if (!productStats[productName]) {
+                productStats[productName] = {
+                    name: productName,
+                    revenue: 0,
+                    quantity: 0
+                };
+            }
+            productStats[productName].revenue += sale.quantity * sale.sale_price;
+            productStats[productName].quantity += sale.quantity;
+        });
+        
+        const topProducts = Object.values(productStats)
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 5);
+        
+        displayTopProducts(topProducts);
     } catch (error) {
         console.error('Error loading top products:', error);
         document.getElementById('top-products-table').innerHTML = '<p>No data available</p>';
@@ -396,8 +410,7 @@ async function loadSales() {
     try {
         showLoading('sales-table');
         
-        const month = document.getElementById('sales-month-filter').value;
-        const response = await fetch(`${API_BASE}/monthly-sales/${month}`);
+        const response = await fetch(`${API_BASE}/sales`);
         const sales = await response.json();
         
         displaySales(sales);
@@ -459,8 +472,7 @@ async function loadCosts() {
     try {
         showLoading('costs-table');
         
-        const month = document.getElementById('costs-month-filter').value;
-        const response = await fetch(`${API_BASE}/costs/${month}`);
+        const response = await fetch(`${API_BASE}/costs`);
         const costs = await response.json();
         
         displayCosts(costs);
@@ -919,28 +931,69 @@ function displayAllocationResults(result) {
 
 // Report functions
 async function generateReport() {
-    const month = document.getElementById('report-month').value;
-    
-    if (!month) {
-        showAlert('Please select a month', 'error');
-        return;
-    }
-    
     try {
         showLoading('report-results');
         
-        const response = await fetch(`${API_BASE}/report/${month}`);
+        // Get all data instead of month-based report
+        const [salesResponse, costsResponse] = await Promise.all([
+            fetch(`${API_BASE}/sales`),
+            fetch(`${API_BASE}/costs`)
+        ]);
         
-        if (response.ok) {
-            const result = await response.json();
-            displayReportResults(result);
-        } else {
-            const error = await response.json();
-            showAlert(error.detail || 'Error generating report', 'error');
-        }
+        const sales = await salesResponse.json();
+        const costs = await costsResponse.json();
+        
+        // Generate report from all data
+        const result = generateReportFromData(sales, costs);
+        displayReportResults(result);
+        
     } catch (error) {
-        showAlert('Error connecting to server', 'error');
+        console.error('Error generating report:', error);
+        showAlert('Error generating report', 'error');
     }
+}
+
+function generateReportFromData(sales, costs) {
+    // Calculate totals
+    const totalRevenue = sales.reduce((sum, sale) => sum + (sale.quantity * sale.sale_price), 0);
+    const totalDirectCosts = sales.reduce((sum, sale) => sum + sale.direct_cost, 0);
+    const totalSharedCosts = costs.reduce((sum, cost) => sum + cost.amount, 0);
+    const totalCosts = totalDirectCosts + totalSharedCosts;
+    const totalProfit = totalRevenue - totalCosts;
+    
+    // Group by product
+    const productStats = {};
+    sales.forEach(sale => {
+        const productName = sale.product_name;
+        if (!productStats[productName]) {
+            productStats[productName] = {
+                name: productName,
+                quantity: 0,
+                revenue: 0,
+                direct_cost: 0,
+                source: sale.product?.source || 'unknown'
+            };
+        }
+        productStats[productName].quantity += sale.quantity;
+        productStats[productName].revenue += sale.quantity * sale.sale_price;
+        productStats[productName].direct_cost += sale.direct_cost;
+    });
+    
+    // Calculate top products
+    const topProducts = Object.values(productStats)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+    
+    return {
+        total_revenue: totalRevenue,
+        total_costs: totalCosts,
+        total_profit: totalProfit,
+        total_direct_costs: totalDirectCosts,
+        total_shared_costs: totalSharedCosts,
+        top_products: topProducts,
+        product_count: Object.keys(productStats).length,
+        sales_count: sales.length
+    };
 }
 
 function displayReportResults(result) {
@@ -1020,31 +1073,61 @@ function displayReportResults(result) {
 
 // Export functions
 async function exportReport() {
-    const month = document.getElementById('report-month').value;
-    
-    if (!month) {
-        showAlert('Please select a month', 'error');
-        return;
-    }
-    
     try {
-        const response = await fetch(`${API_BASE}/export/${month}/csv`);
-        const result = await response.json();
+        // Get all data and generate CSV
+        const [salesResponse, costsResponse] = await Promise.all([
+            fetch(`${API_BASE}/sales`),
+            fetch(`${API_BASE}/costs`)
+        ]);
         
-        if (response.ok) {
-            // Create download link
-            const link = document.createElement('a');
-            link.href = result.download_url;
-            link.download = `report_${month}.csv`;
-            link.click();
-            
-            showAlert('Report exported successfully!', 'success');
-        } else {
-            showAlert('Error exporting report', 'error');
-        }
+        const sales = await salesResponse.json();
+        const costs = await costsResponse.json();
+        
+        // Generate CSV content
+        const csvContent = generateCSVContent(sales, costs);
+        
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `report_all_data.csv`;
+        link.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        
+        showAlert('Report exported successfully!', 'success');
+        
     } catch (error) {
+        console.error('Error exporting report:', error);
         showAlert('Error exporting report', 'error');
     }
+}
+
+function generateCSVContent(sales, costs) {
+    let csv = 'Product,Source,Quantity,Price,Revenue,Direct Cost,Month\n';
+    
+    sales.forEach(sale => {
+        const productName = sale.product_name || 'Unknown';
+        const source = sale.product?.source || 'unknown';
+        const quantity = sale.quantity || 0;
+        const price = sale.sale_price || 0;
+        const revenue = quantity * price;
+        const directCost = sale.direct_cost || 0;
+        const month = sale.month || 'Unknown';
+        
+        csv += `"${productName}","${source}",${quantity},${price},${revenue},${directCost},"${month}"\n`;
+    });
+    
+    csv += '\nCosts\n';
+    csv += 'Name,Amount,Type,Month\n';
+    
+    costs.forEach(cost => {
+        csv += `"${cost.name}",${cost.amount},"${cost.type}","${cost.month}"\n`;
+    });
+    
+    return csv;
 }
 
 // Utility functions
@@ -1169,7 +1252,7 @@ async function editSales(id) {
         
         // Populate form with existing data
         document.getElementById('sales-product').value = productId;
-        document.getElementById('sales-month').value = '2025-10'; // Default month
+        document.getElementById('sales-month').value = '2025-10'; // Default month (optional)
         document.getElementById('sales-quantity').value = quantity;
         document.getElementById('sales-price').value = salePrice;
         document.getElementById('sales-direct-cost').value = directCost;
@@ -1313,4 +1396,325 @@ function initializeSidebar() {
             mainContent.classList.add('sidebar-collapsed');
         }
     }
+}
+
+// Excel Upload Functions
+let uploadedData = null;
+
+async function handleExcelUpload(event) {
+    console.log('🚀 Starting Excel upload...');
+    
+    const file = event.target.files[0];
+    if (!file) {
+        console.log('❌ No file selected');
+        return;
+    }
+    
+    console.log(`📁 Selected file: ${file.name} (${file.size} bytes)`);
+    
+    // Validate file type
+    const allowedTypes = ['.xlsx', '.xls'];
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    
+    if (!allowedTypes.includes(fileExtension)) {
+        console.log('❌ Invalid file type:', fileExtension);
+        showUploadError('Please select an Excel file (.xlsx or .xls). CSV files are not supported.');
+        event.target.value = ''; // Clear the file input
+        return;
+    }
+    
+    console.log('✅ File type valid, starting upload...');
+    
+    // Show progress
+    showUploadProgress();
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        console.log('📤 Sending request to backend...');
+        
+        const response = await fetch(`${API_BASE}/upload-excel`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log(`📥 Response status: ${response.status} ${response.statusText}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('📊 Upload result:', result);
+        
+        if (result.success) {
+            console.log('✅ Upload successful!');
+            console.log('📊 Upload details:', {
+                message: result.message,
+                products_created: result.products_created,
+                sales_created: result.sales_created,
+                parsed_data_length: result.parsed_data ? result.parsed_data.length : 0
+            });
+            
+            uploadedData = result;
+            showUploadResults(result);
+            showExcelPreview(result);
+            
+            // Force refresh all data with delay to ensure database is updated
+            console.log('🔄 Refreshing all dashboard data...');
+            setTimeout(async () => {
+                await Promise.all([
+                    loadDashboardData(),
+                    loadProducts(),
+                    loadSales(),
+                    loadCosts()
+                ]);
+                console.log('✅ Dashboard data refreshed');
+                
+                // Force update the data preview
+                updateDataPreview();
+            }, 500);
+        } else {
+            console.log('❌ Upload failed:', result.message);
+            showUploadError(result.message || 'Upload failed');
+        }
+    } catch (error) {
+        console.error('💥 Upload error:', error);
+        showUploadError('Failed to upload file: ' + error.message);
+    } finally {
+        hideUploadProgress();
+    }
+}
+
+function showUploadProgress() {
+    document.getElementById('upload-progress').style.display = 'block';
+    document.getElementById('upload-results').style.display = 'none';
+    document.getElementById('excel-preview').style.display = 'none';
+    
+    // Simulate progress
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += 10;
+        document.getElementById('progress-fill').style.width = `${progress}%`;
+        document.getElementById('upload-status').textContent = `Processing... ${progress}%`;
+        
+        if (progress >= 100) {
+            clearInterval(interval);
+        }
+    }, 100);
+}
+
+function hideUploadProgress() {
+    document.getElementById('upload-progress').style.display = 'none';
+}
+
+function showUploadResults(result) {
+    console.log('showUploadResults called with:', result);
+    const resultsDiv = document.getElementById('upload-results');
+    const messageDiv = document.getElementById('upload-message');
+    const productsCreatedDiv = document.getElementById('products-created');
+    const salesCreatedDiv = document.getElementById('sales-created');
+    
+    console.log('Elements found:', {
+        resultsDiv: !!resultsDiv,
+        messageDiv: !!messageDiv,
+        productsCreatedDiv: !!productsCreatedDiv,
+        salesCreatedDiv: !!salesCreatedDiv
+    });
+    
+    messageDiv.textContent = result.message || 'Upload completed';
+    productsCreatedDiv.textContent = `Products Created: ${result.products_created || 0}`;
+    salesCreatedDiv.textContent = `Sales Records: ${result.sales_created || 0}`;
+    
+    resultsDiv.style.display = 'block';
+    console.log('Results displayed');
+    
+    // Always refresh dashboard data after successful upload
+    if (result.success) {
+        console.log('Refreshing dashboard data after upload...');
+        loadDashboardData();
+        loadProducts();
+        loadSales();
+        loadCosts();
+        
+        // Update the preview section with current database state
+        updateDataPreview();
+    }
+}
+
+async function updateDataPreview() {
+    try {
+        // Get current dashboard stats and sales data
+        const [statsResponse, salesResponse] = await Promise.all([
+            fetch(`${API_BASE}/dashboard/stats`),
+            fetch(`${API_BASE}/sales`)
+        ]);
+        
+        const stats = await statsResponse.json();
+        const sales = await salesResponse.json();
+        
+        // Calculate inhouse production from sales data
+        const inhouseProduction = sales.reduce((sum, sale) => sum + (sale.inhouse_production || 0), 0);
+        
+        // Update preview cards with current database state
+        document.getElementById('preview-products-count').textContent = stats.total_products || 0;
+        document.getElementById('preview-sales-count').textContent = sales.length || 0;
+        document.getElementById('preview-revenue').textContent = `₹${(stats.total_revenue || 0).toLocaleString()}`;
+        document.getElementById('preview-production').textContent = `${inhouseProduction.toFixed(1)} kg`;
+        
+        console.log('Data preview updated:', {
+            products: stats.total_products,
+            sales: sales.length,
+            revenue: stats.total_revenue,
+            production: inhouseProduction
+        });
+    } catch (error) {
+        console.error('Error updating data preview:', error);
+        // Set default values on error
+        document.getElementById('preview-products-count').textContent = '0';
+        document.getElementById('preview-sales-count').textContent = '0';
+        document.getElementById('preview-revenue').textContent = '₹0';
+        document.getElementById('preview-production').textContent = '0 kg';
+    }
+}
+
+function showUploadError(message) {
+    const resultsDiv = document.getElementById('upload-results');
+    resultsDiv.innerHTML = `
+        <div class="alert alert-error" style="background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; border: 1px solid #fecaca;">
+            <h4 style="margin-bottom: 10px;">
+                <i class="fas fa-exclamation-circle"></i>
+                Upload Failed
+            </h4>
+            <p>${message}</p>
+        </div>
+    `;
+    resultsDiv.style.display = 'block';
+}
+
+function showExcelPreview(result) {
+    console.log('showExcelPreview called with:', result);
+    const previewDiv = document.getElementById('excel-preview');
+    
+    // Update summary cards
+    document.getElementById('preview-products-count').textContent = result.products_created;
+    document.getElementById('preview-sales-count').textContent = result.sales_created;
+    
+    // Calculate totals
+    if (result.parsed_data && result.parsed_data.length > 0) {
+        const totalRevenue = result.parsed_data.reduce((sum, item) => sum + (item.outward_quantity * item.outward_rate), 0);
+        const totalProduction = result.parsed_data.reduce((sum, item) => sum + item.inhouse_production, 0);
+        
+        document.getElementById('preview-revenue').textContent = `₹${totalRevenue.toLocaleString()}`;
+        document.getElementById('preview-production').textContent = `${totalProduction.toFixed(1)} kg`;
+        
+        // Populate products table
+        const productsTable = document.getElementById('preview-products-table');
+        const uniqueProducts = [...new Set(result.parsed_data.map(item => item.particulars))];
+        
+        productsTable.innerHTML = uniqueProducts.map(product => {
+            const productData = result.parsed_data.find(item => item.particulars === product);
+            return `
+                <tr>
+                    <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">${product}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">
+                        <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; 
+                            background: ${productData.type.toLowerCase() === 'in-house' ? '#dbeafe' : '#fef3c7'}; 
+                            color: ${productData.type.toLowerCase() === 'in-house' ? '#1e40af' : '#92400e'};">
+                            ${productData.type}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Populate sales table
+        const salesTable = document.getElementById('preview-sales-table');
+        salesTable.innerHTML = result.parsed_data.map(item => `
+            <tr>
+                <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">${item.particulars}</td>
+                <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">${item.outward_quantity.toFixed(1)} kg</td>
+                <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">₹${item.outward_rate.toFixed(2)}</td>
+                <td style="padding: 12px; border-bottom: 1px solid var(--border-color);">₹${(item.outward_quantity * item.outward_rate).toLocaleString()}</td>
+            </tr>
+        `).join('');
+    }
+    
+    previewDiv.style.display = 'block';
+}
+
+function confirmExcelUpload() {
+    if (!uploadedData) return;
+    
+    // Data is already saved to database during upload
+    // Just refresh the current data and show success
+    showNotification('Data uploaded and saved successfully!', 'success');
+    
+    // Refresh current tab data
+    if (currentTab === 'products') {
+        loadProducts();
+    } else if (currentTab === 'sales') {
+        loadSales();
+    } else if (currentTab === 'dashboard') {
+        loadDashboardData();
+    }
+    
+    // Hide preview
+    cancelExcelUpload();
+}
+
+function cancelExcelUpload() {
+    document.getElementById('excel-preview').style.display = 'none';
+    document.getElementById('upload-results').style.display = 'none';
+    document.getElementById('excel-file-input').value = '';
+    uploadedData = null;
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    `;
+    
+    // Set background color based on type
+    const colors = {
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
+        info: '#3B82F6'
+    };
+    notification.style.backgroundColor = colors[type] || colors.info;
+    
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+        ${message}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
 }
