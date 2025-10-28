@@ -1279,46 +1279,43 @@ def parse_purple_patch_pl(file_path, db):
     
     # Items to EXCLUDE (revenue/trading account items)
     exclude_items = {
-        'Hamper Sales (B to C)', 'Karnataka Sales', 'Kerala Sales', 'Tamilnadu Sales', 
-        'Complement Sales', 'Customer Quality Issue and Damage B to B', 
+        # Sales/Revenue items
+        'Hamper Sales (B to C)', 'Karnataka Sales', 'Kerala Sales B', 'Tamilnadu Sales B', 
+        'Complement Sales', 'Complement Sales B', 'Customer Quality Issue and Damage B to B', 
+        'Customer Quality Issue and Damage B to B  B', 'Customer Quality Issue and Damage(B to C) B',
         'Customer Quality Issue and Damage (B to C)', 'Sales Return',
-        'Discount Rate (B to B Rate)', 'DISCOUNT', 'Free Hamper'
+        'Discount Rate( B to B Rate) B', 'Discount Rate (B to B Rate)', 'DISCOUNT', 'Free Hamper',
+        # Trading Account items (NOT actual expenses to allocate)
+        'Opening Stock', 'Add: Purchase Accounts', 'Less: Closing Stock', 'Direct Expenses'
     }
     
     # Fixed template mapping
     template_mapping = {
-        'Opening Stock': 'B',
-        'Purchase Accounts': 'O',
-        'Closing Stock': 'B',
-        'Cultivation Expenses': 'I',
-        'Drivers Betta': 'B',
-        'ELECTRICITY CHARGES': 'B',
-        'Employee Benefits Expenses': 'B',
-        'Freight Charges': 'B',
-        'Fright Charges & Transportation': 'B',
-        'Office & Administrative Expenses': 'B',
-        'Running & Maintenance': 'B',
-        'Software Maintenance': 'B',
-        'Transportation Exp': 'B',
-        'Travelling Allowance - Staff': 'B',
-        'Vehicle Fuels': 'B',
-        'Vehicle Maintenance': 'B',
-        'Vehicle Taxes & Insurance': 'B',
-        'Entry Fee - Ooty Market': 'O',
-        'Loading and Unloading - Vegetable Purchase & Fruits': 'O',
-        'Loading Charges Others': 'B',
-        'Miscellaneous Exp': 'B',
-        'Packing Materials Issued A/c': 'B',
-        'Packing Room Rent - Ooty': 'B',
-        'Rejection Own Farm Harvest': 'I',
-        'Staff House Rent': 'B',
-        'Tea and Food Exp - Staff': 'B',
-        'Wastage - in Farm (Quality Check)': 'I',
+        'Cultivation Expenses I': 'I',
+        'Rejection Own Farm Harvest I': 'I',
+        'Wastage-in Farm (Quality Check) I': 'I',
+        'Entry Fee- Ooty Market O': 'O',
+        'Loading and Unloading - Vegetable Purchase & Fruits O': 'O',
+        'Drivers Betta B': 'B',
+        'ELECTRICITY CHARGES B': 'B',
+        'Employee Benefits Expenses B': 'B',
+        'Freight Charges B': 'B',
+        'Office & Administrative Expenses B': 'B',
+        'Running & Maintanance B': 'B',
+        'Software Maintananace B': 'B',
+        'Transportation Exp B': 'B',
+        'Travelling Allowance -Staff B': 'B',
+        'Vehicle Fuels B': 'B',
+        'Vehicle Maintanance B': 'B',
+        'Vehicle Taxes &Insurance B': 'B',
+        'Loading Charges Others B': 'B',
+        'Miscellaneous Exp B': 'B',
+        'Packing Materials Issued A/c B': 'B',
+        'Staff House Rent B': 'B',
+        'Tea and Food Exp-Staff B': 'B',
         'Delivery Charges': 'B',
         'INTEREST ON INCOME TAX REFUND': 'B',
         'Packing & Forwarding Charges': 'B',
-        'Rewards Credited From BP': 'B',
-        'Scrap Items': 'B',
         'Banking Charges': 'B',
         'Distribution Expenses': 'B',
         'Employee Cost': 'B',
@@ -1342,13 +1339,13 @@ def parse_purple_patch_pl(file_path, db):
         'Legal Expenses': 'B',
         'Loading and Unloading - Sales': 'B',
         'Round Off': 'B',
-        'RTA Fee': 'B',
         'Salary and Allowances': 'B',
         'TDS Filing Charges': 'B',
         'TDS Service Charges': 'B',
         'Trade Mark Registration Consultancy Fee': 'B',
         'Trade Mark Registration Fee': 'B',
-        'Wastage - in Dispatch': 'B'
+        'Wastage - in Dispatch': 'B',
+        'Wastage-in Dispatch': 'B'
     }
     
     try:
