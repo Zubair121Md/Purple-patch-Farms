@@ -425,11 +425,23 @@ class CostAllocationEngine:
         # Get product to access unit information
         product = sale.product
         
+        # Unit conversion factors (EA to grams)
+        UNIT_CONVERSIONS = {
+            'Button Mushroom': 3.0,  # 3 grams per EA
+            'Baby Corn': 170.0  # 170 grams per EA
+        }
+        
         if cost.basis == "weight":
-            # For products measured in units (EA), use value-based allocation
-            # to avoid mixing kg and EA directly
+            # Check if this EA product has a weight conversion
             if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
-                # Use value-based for EA products to avoid unit mismatch
+                # Check if product has a conversion factor
+                product_name = product.name.lower()
+                for key, grams_per_ea in UNIT_CONVERSIONS.items():
+                    if key.lower() in product_name:
+                        # Convert EA to grams, then to kg
+                        return (sale.quantity * grams_per_ea) / 1000.0
+                
+                # No conversion factor, use value-based allocation
                 return sale.quantity * sale.sale_price
             return sale.quantity
         elif cost.basis == "value":
