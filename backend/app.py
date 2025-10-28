@@ -422,12 +422,22 @@ class CostAllocationEngine:
     
     def _compute_product_basis(self, cost: Cost, sale: MonthlySale) -> float:
         """Compute basis for a single product"""
+        # Get product to access unit information
+        product = sale.product
+        
         if cost.basis == "weight":
+            # For products measured in units (EA), use value-based allocation
+            # to avoid mixing kg and EA directly
+            if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
+                # Use value-based for EA products to avoid unit mismatch
+                return sale.quantity * sale.sale_price
             return sale.quantity
         elif cost.basis == "value":
             return sale.quantity * sale.sale_price
         elif cost.basis == "trips":
-            # For trips, we'll use quantity as a proxy (can be enhanced)
+            # For trips, use value-based to avoid unit issues
+            if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
+                return sale.quantity * sale.sale_price
             return sale.quantity
         return 0.0
     
@@ -1267,17 +1277,16 @@ def parse_purple_patch_pl(file_path, db):
     
     print(f"📊 Parsing Purple Patch P&L: {file_path}")
     
+    # Items to EXCLUDE (revenue/trading account items)
+    exclude_items = {
+        'Hamper Sales (B to C)', 'Karnataka Sales', 'Kerala Sales', 'Tamilnadu Sales', 
+        'Complement Sales', 'Customer Quality Issue and Damage B to B', 
+        'Customer Quality Issue and Damage (B to C)', 'Sales Return',
+        'Discount Rate (B to B Rate)', 'DISCOUNT', 'Free Hamper'
+    }
+    
     # Fixed template mapping
     template_mapping = {
-        'Hamper Sales (B to C)': 'B',
-        'Karnataka Sales': 'B',
-        'Kerala Sales': 'B',
-        'Tamilnadu Sales': 'B',
-        'Complement Sales': 'B',
-        'Customer Quality Issue and Damage B to B': 'B',
-        'Customer Quality Issue and Damage (B to C)': 'B',
-        'Discount Rate (B to B Rate)': 'B',
-        'Sales Return': 'B',
         'Opening Stock': 'B',
         'Purchase Accounts': 'O',
         'Closing Stock': 'B',
@@ -1378,6 +1387,12 @@ def parse_purple_patch_pl(file_path, db):
                     if amount_str and amount_str != 'nan':
                         amount = float(amount_str)
                         if particulars and amount != 0:
+                            # Skip revenue/trading account items
+                            if particulars in exclude_items:
+                                print(f"   ⏭️  Skipped revenue item: {particulars}")
+                                continue
+                            
+                            # Only include actual expenses (costs)
                             data_rows.append({
                                 'particulars': particulars,
                                 'amount': amount,
