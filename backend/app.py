@@ -445,7 +445,10 @@ class CostAllocationEngine:
                 return sale.quantity * sale.sale_price
             return sale.quantity
         elif cost.basis == "value":
-            return sale.quantity * sale.sale_price
+            # Use purchase cost (direct_cost) instead of revenue
+            # This makes allocation fair - products aren't penalized for higher markup
+            # Allocation should be based on what was purchased/spent, not what was sold for
+            return sale.direct_cost if sale.direct_cost > 0 else sale.quantity * sale.sale_price
         elif cost.basis == "trips":
             # For trips, use value-based to avoid unit issues
             if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
