@@ -1389,20 +1389,37 @@ def parse_purple_patch_pl(file_path, db):
         
         print(f"📊 Found {len(data_rows)} data rows")
         
-        # Calculate ratios
-        i_total = sum(row['amount'] for row in data_rows if row['type'] == 'I')
-        o_total = sum(row['amount'] for row in data_rows if row['type'] == 'O')
-        b_total = sum(row['amount'] for row in data_rows if row['type'] == 'B')
+        # Calculate ratio based on ACTUAL SALES DATA from database
+        from sqlalchemy import func
         
-        # Calculate dynamic ratio or use default
-        if i_total + o_total > 0:
-            inhouse_ratio = i_total / (i_total + o_total)
-            outsourced_ratio = o_total / (i_total + o_total)
+        sales = db.query(MonthlySale).join(Product).all()
+        
+        # Calculate based on revenue (quantity * sale_price)
+        inhouse_sales_total = sum(s.quantity * s.sale_price for s in sales if s.product.source == "inhouse")
+        outsourced_sales_total = sum(s.quantity * s.sale_price for s in sales if s.product.source == "outsourced")
+        total_sales = inhouse_sales_total + outsourced_sales_total
+        
+        # Calculate dynamic ratio based on actual revenue
+        if total_sales > 0:
+            inhouse_ratio = inhouse_sales_total / total_sales
+            outsourced_ratio = outsourced_sales_total / total_sales
+            print(f"📊 Using REVENUE-BASED ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
+            print(f"   💰 Inhouse Revenue: ₹{inhouse_sales_total:,.2f} | Outsourced Revenue: ₹{outsourced_sales_total:,.2f}")
         else:
-            inhouse_ratio = 0.1822  # Default ratio
-            outsourced_ratio = 0.8178
-        
-        print(f"📊 Ratios calculated - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
+            # Fallback to quantity-based ratio
+            inhouse_qty = sum(s.quantity for s in sales if s.product.source == "inhouse")
+            outsourced_qty = sum(s.quantity for s in sales if s.product.source == "outsourced")
+            total_qty = inhouse_qty + outsourced_qty
+            
+            if total_qty > 0:
+                inhouse_ratio = inhouse_qty / total_qty
+                outsourced_ratio = outsourced_qty / total_qty
+                print(f"📊 Using QUANTITY-BASED ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
+                print(f"   📦 Inhouse Qty: {inhouse_qty:,.2f} | Outsourced Qty: {outsourced_qty:,.2f}")
+            else:
+                inhouse_ratio = 0.1822  # Default ratio
+                outsourced_ratio = 0.8178
+                print(f"📊 Using DEFAULT ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
         
         # Create Cost records
         costs_created = 0
