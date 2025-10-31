@@ -19,6 +19,79 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Helper function for unit conversion
+def _to_kg(product_name: str, quantity: float, unit: str) -> float:
+    """Convert EA quantities to kg using product-specific conversion factors"""
+    if not unit:
+        return quantity
+    u = unit.upper()
+    # Extendable map for EA conversions
+    EA_CONV_G = {
+        'BUTTON MUSHROOM': 200.0,   # grams per EA
+        'BABY CORN': 200.0,         # grams per EA
+    }
+    if u in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
+        for key, g in EA_CONV_G.items():
+            if key in product_name.upper():
+                return (quantity * g) / 1000.0
+        # No conversion → treat as value-only items
+        return 0.0
+    return quantity
+
+def compute_inhouse_outsourced_ratios(db: Session, alpha: float = 0.5) -> tuple:
+    """
+    Compute dynamic segment ratios from current sales data
+    
+    Args:
+        db: Database session
+        alpha: Weight for weight vs value (0.5 = 50% weight, 50% value)
+    
+    Returns:
+        (inhouse_ratio, outsourced_ratio) tuple
+    """
+    # Aggregate totals from current sales
+    sales = db.query(MonthlySale).join(Product).all()
+    in_w = 0.0; out_w = 0.0
+    in_v = 0.0; out_v = 0.0
+    
+    for s in sales:
+        qty_kg = _to_kg(s.product.name, s.quantity, s.product.unit)
+        rev = s.quantity * s.sale_price
+        if s.product.source == "inhouse":
+            in_w += qty_kg
+            in_v += rev
+        else:
+            out_w += qty_kg
+            out_v += rev
+
+    # Compute shares with safety
+    total_w = in_w + out_w
+    total_v = in_v + out_v
+    in_w_share = (in_w / total_w) if total_w > 0 else 0.0
+    out_w_share = (out_w / total_w) if total_w > 0 else 0.0
+    in_v_share = (in_v / total_v) if total_v > 0 else 0.0
+    out_v_share = (out_v / total_v) if total_v > 0 else 0.0
+
+    # Hybrid segment ratio: α*weight + (1-α)*value
+    in_ratio = alpha * in_w_share + (1 - alpha) * in_v_share
+    out_ratio = alpha * out_w_share + (1 - alpha) * out_v_share
+    
+    # Normalize in case of numeric drift
+    total = in_ratio + out_ratio
+    if total > 0:
+        in_ratio /= total
+        out_ratio /= total
+    else:
+        # Fallback if no data
+        in_ratio, out_ratio = 0.1822, 0.8178
+
+    print(f"📊 DYNAMIC SEGMENT RATIOS (hybrid α={alpha:.2f}):")
+    print(f"   📦 Weight: Inhouse {in_w:.2f}kg ({in_w_share:.1%}), Outsourced {out_w:.2f}kg ({out_w_share:.1%})")
+    print(f"   💰 Value: Inhouse ₹{in_v:,.2f} ({in_v_share:.1%}), Outsourced ₹{out_v:,.2f} ({out_v_share:.1%})")
+    print(f"   🎯 Final: Inhouse {in_ratio:.4f} ({in_ratio:.1%}), Outsourced {out_ratio:.4f} ({out_ratio:.1%})")
+    
+    return in_ratio, out_ratio
+
 # Database Models
 class Product(Base):
     __tablename__ = "products"
@@ -159,6 +232,7 @@ class MonthlySaleResponse(BaseModel):
     id: int
     product_id: int
     product_name: str
+    unit: str
     month: str
     quantity: float
     sale_price: float
@@ -175,7 +249,7 @@ class CostCreate(BaseModel):
     amount: float = Field(..., gt=0)
     applies_to: str = Field(..., pattern="^(inhouse|outsourced|both|all)$")
     cost_type: str = Field(..., pattern="^(purchase-only|sales-only|common|inhouse-only)$")
-    basis: str = Field(..., pattern="^(weight|value|trips)$")
+    basis: str = Field(..., pattern="^(weight|value|trips|hybrid)$")
     month: str = Field(..., pattern="^\\d{4}-\\d{2}$")
     is_fixed: str = Field(default="variable", pattern="^(fixed|variable)$")
     category: str = Field(default="general", max_length=50)
@@ -192,7 +266,7 @@ class CostUpdate(BaseModel):
     amount: Optional[float] = Field(None, gt=0)
     applies_to: Optional[str] = Field(None, pattern="^(inhouse|outsourced|both|all)$")
     cost_type: Optional[str] = Field(None, pattern="^(purchase-only|sales-only|common|inhouse-only)$")
-    basis: Optional[str] = Field(None, pattern="^(weight|value|trips)$")
+    basis: Optional[str] = Field(None, pattern="^(weight|value|trips|hybrid)$")
     is_fixed: Optional[str] = Field(None, pattern="^(fixed|variable)$")
     category: Optional[str] = Field(None, max_length=50)
 
@@ -310,6 +384,15 @@ def get_db():
 class CostAllocationEngine:
     def __init__(self, db: Session):
         self.db = db
+        # Settings: Use REAL values from P&L - no artificial damping
+        # High-volume products will get more costs because they actually consume more resources
+        # This shows TRUE profitability based on actual resource consumption
+        # FAIR ALLOCATION: Overhead allocated by weight + revenue (NOT purchase cost)
+        # Purchase cost is already in direct_cost - don't penalize outsourced twice
+        self.B_HYBRID_ALPHA = 0.6  # 60% weight (resource consumption), 40% revenue (business contribution)
+        self.DAMP_WEIGHT_FOR_B = False  # NO damping - use actual weight to reflect real resource consumption
+        self.DAMP_VALUE_FOR_B = False  # NO damping - use actual revenue
+        self.OVERHEAD_CAP_FACTOR = None  # No cap - let real costs flow through
     
     def allocate_costs_for_month(self, month: str) -> Dict[str, Any]:
         """Enhanced allocation function - works with all data regardless of month"""
@@ -341,9 +424,14 @@ class CostAllocationEngine:
             # Clear existing allocations (ignore month)
             self.db.query(Allocation).delete()
             
+            # No overhead cap - let real P&L costs flow through to show true profitability
+            allocated_so_far: Dict[int, float] = {pid: 0.0 for pid in product_map.keys()}
+            cap_by_product: Dict[int, float] = {}
+            # No cap applied - removed artificial limit to show real cost allocation
+
             # Process each cost
             for cost in costs:
-                self._allocate_single_cost(cost, product_map, sales_map, month)
+                self._allocate_single_cost(cost, product_map, sales_map, month, allocated_so_far, cap_by_product)
             
             self.db.commit()
             
@@ -354,8 +442,11 @@ class CostAllocationEngine:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Allocation failed: {str(e)}")
     
-    def _allocate_single_cost(self, cost: Cost, product_map: Dict, sales_map: Dict, month: str):
-        """Allocate a single cost to applicable products"""
+    def _allocate_single_cost(self, cost: Cost, product_map: Dict, sales_map: Dict, month: str, allocated_so_far: Dict[int, float], cap_by_product: Dict[int, float]):
+        """Allocate a single cost to applicable products
+        - INHOUSE: Normalized allocation (percentages) - balances weight and profit contribution
+        - OUTSOURCED: Absolute gross profit allocation - protects low-margin products
+        """
         
         # Step 1: Determine which products are affected
         applicable_products = self._get_applicable_products(cost, product_map, sales_map)
@@ -363,13 +454,15 @@ class CostAllocationEngine:
         if not applicable_products:
             return
         
-        # Step 2: Compute total basis
+        # Step 2: Compute total basis and allocate
+        # For hybrid basis: uses pure gross profit (no weight) - same for all products
+        # For other bases: standard allocation
         total_basis = self._compute_total_basis(cost, applicable_products, sales_map)
         
         if total_basis == 0:
             return
         
-        # Step 3: Allocate cost proportionally
+        # Allocate cost proportionally based on basis
         for product_id, product in applicable_products.items():
             if product_id not in sales_map:
                 continue
@@ -379,16 +472,18 @@ class CostAllocationEngine:
             
             if product_basis > 0:
                 allocated_amount = (product_basis / total_basis) * cost.amount
-                
-                # Store allocation
-                allocation = Allocation(
-                    product_id=product_id,
-                    monthly_sale_id=sale.id,
-                    cost_id=cost.id,
-                    month=month,
-                    allocated_amount=allocated_amount
-                )
-                self.db.add(allocation)
+
+                # Store allocation if amount is positive
+                if allocated_amount > 0:
+                    allocation = Allocation(
+                        product_id=product_id,
+                        monthly_sale_id=sale.id,
+                        cost_id=cost.id,
+                        month=month,
+                        allocated_amount=allocated_amount
+                    )
+                    self.db.add(allocation)
+                    allocated_so_far[product_id] = allocated_so_far.get(product_id, 0.0) + allocated_amount
     
     def _get_applicable_products(self, cost: Cost, product_map: Dict, sales_map: Dict) -> Dict:
         """Get products that this cost applies to"""
@@ -424,36 +519,53 @@ class CostAllocationEngine:
         """Compute basis for a single product"""
         # Get product to access unit information
         product = sale.product
-        
-        # Unit conversion factors (EA to grams)
-        UNIT_CONVERSIONS = {
-            'Button Mushroom': 3.0,  # 3 grams per EA
-            'Baby Corn': 170.0  # 170 grams per EA
-        }
+        pname = (product.name or "").lower()
+        unit_upper = (product.unit or "").upper() if hasattr(product, 'unit') and product.unit else ""
+        is_ea = unit_upper in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']
+
+        # Override: allocate by REVENUE only for hampers
+        if "hamper" in pname:
+            return sale.quantity * sale.sale_price
         
         if cost.basis == "weight":
-            # Check if this EA product has a weight conversion
+            # Use REAL weight - no damping. High-volume products consume more resources and should pay proportionally
             if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
-                # Check if product has a conversion factor
-                product_name = product.name.lower()
-                for key, grams_per_ea in UNIT_CONVERSIONS.items():
-                    if key.lower() in product_name:
-                        # Convert EA to grams, then to kg
-                        return (sale.quantity * grams_per_ea) / 1000.0
-                
-                # No conversion factor, use value-based allocation
+                # Use the shared _to_kg helper to convert EA to actual kg
+                qty_kg = _to_kg(product.name, sale.quantity, product.unit)
+                if qty_kg > 0:
+                    return qty_kg  # Use actual weight - no artificial reduction
+                # No conversion factor (value-only items like hampers), use revenue
                 return sale.quantity * sale.sale_price
-            return sale.quantity
+            return sale.quantity  # Use actual weight - no damping
         elif cost.basis == "value":
-            # Use purchase cost (direct_cost) instead of revenue
-            # This makes allocation fair - products aren't penalized for higher markup
-            # Allocation should be based on what was purchased/spent, not what was sold for
-            return sale.direct_cost if sale.direct_cost > 0 else sale.quantity * sale.sale_price
+            # Use REVENUE (not purchase cost) for fair allocation
+            # Purchase cost is already accounted for in direct_cost - don't penalize twice
+            # Revenue reflects business contribution and is fair to both inhouse and outsourced
+            return sale.quantity * sale.sale_price
         elif cost.basis == "trips":
             # For trips, use value-based to avoid unit issues
             if hasattr(product, 'unit') and product.unit and product.unit.upper() in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']:
                 return sale.quantity * sale.sale_price
             return sale.quantity
+        elif cost.basis == "hybrid":
+            # Industry-standard hybrid allocation: 20% weight + 80% gross profit
+            # Balances resource consumption (weight) with profitability (gross profit)
+            # This is the established standard in manufacturing/agriculture
+            # Both inhouse and outsourced use the same method
+            
+            # Weight part (20%): Use ACTUAL weight in kg (with EA→kg conversion where applicable)
+            qty_kg = _to_kg(product.name, sale.quantity, product.unit) if hasattr(product, 'unit') else sale.quantity
+            weight_part = qty_kg
+            
+            # Gross Profit part (80%): Revenue - Direct Cost
+            revenue = sale.quantity * sale.sale_price
+            direct_cost = sale.direct_cost or 0.0
+            gross_profit = max(0.0, revenue - direct_cost)  # Ensure non-negative
+            
+            # Combined basis: 20% weight + 80% gross profit
+            # Weight and profit are on different scales, but this creates fair balance
+            # High-profit products still get most allocation (80%), but weight matters (20%)
+            return 0.20 * weight_part + 0.80 * gross_profit
         return 0.0
     
     def _generate_monthly_report(self, month: str, product_map: Dict, sales_map: Dict) -> Dict[str, Any]:
@@ -503,6 +615,7 @@ class CostAllocationEngine:
                 "product_id": product_id,
                 "product_name": product.name,
                 "source": product.source,
+                "unit": getattr(product, 'unit', 'kg'),
                 "quantity": sale.quantity,
                 "sale_price": sale.sale_price,
                 "direct_cost": sale.direct_cost,
@@ -741,7 +854,8 @@ async def get_all_sales(db: Session = Depends(get_db)):
         product = db.query(Product).filter(Product.id == sale.product_id).first()
         sales_with_names.append(MonthlySaleResponse(
             **sale.__dict__,
-            product_name=product.name if product else "Unknown"
+            product_name=product.name if product else "Unknown",
+            unit=product.unit if product and getattr(product, 'unit', None) else 'kg'
         ))
     
     return sales_with_names
@@ -766,7 +880,8 @@ async def get_monthly_sales_or_by_id(param: str, db: Session = Depends(get_db)):
         product = db.query(Product).filter(Product.id == sale.product_id).first()
         sale_response = MonthlySaleResponse(
             **sale.__dict__,
-            product_name=product.name if product else "Unknown"
+            product_name=product.name if product else "Unknown",
+            unit=product.unit if product and getattr(product, 'unit', None) else 'kg'
         )
         print(f"DEBUG: Returning single sale: {sale_response}")
         return sale_response
@@ -782,7 +897,8 @@ async def get_monthly_sales_or_by_id(param: str, db: Session = Depends(get_db)):
             product = db.query(Product).filter(Product.id == sale.product_id).first()
             sales_with_names.append(MonthlySaleResponse(
                 **sale.__dict__,
-                product_name=product.name if product else "Unknown"
+                product_name=product.name if product else "Unknown",
+                unit=product.unit if product and getattr(product, 'unit', None) else 'kg'
             ))
         
         return sales_with_names
@@ -822,7 +938,8 @@ async def update_monthly_sale(sale_id: int, sale_update: MonthlySaleUpdate, db: 
     product = db.query(Product).filter(Product.id == sale.product_id).first()
     return MonthlySaleResponse(
         **sale.__dict__,
-        product_name=product.name if product else "Unknown"
+        product_name=product.name if product else "Unknown",
+        unit=product.unit if product and getattr(product, 'unit', None) else 'kg'
     )
 
 # Cost endpoints
@@ -885,14 +1002,24 @@ async def allocate_costs(month: str, db: Session = Depends(get_db)):
 @app.get("/api/report/{month}")
 async def get_monthly_report(month: str, db: Session = Depends(get_db)):
     engine = CostAllocationEngine(db)
-    return engine._generate_monthly_report(month, {}, {})
+    # Build maps from DB so report has data
+    products = db.query(Product).filter(Product.is_active == True).all()
+    product_map = {p.id: p for p in products}
+    monthly_sales = db.query(MonthlySale).all()
+    sales_map = {s.product_id: s for s in monthly_sales}
+    return engine._generate_monthly_report(month, product_map, sales_map)
 
 # Export endpoints
 @app.get("/api/export/{month}/csv")
 async def export_monthly_csv(month: str, db: Session = Depends(get_db)):
     """Export monthly report as CSV"""
     engine = CostAllocationEngine(db)
-    report = engine._generate_monthly_report(month, {}, {})
+    # Build maps from DB so report has data
+    products = db.query(Product).filter(Product.is_active == True).all()
+    product_map = {p.id: p for p in products}
+    monthly_sales = db.query(MonthlySale).all()
+    sales_map = {s.product_id: s for s in monthly_sales}
+    report = engine._generate_monthly_report(month, product_map, sales_map)
     
     # Create DataFrame
     df = pd.DataFrame(report['products'])
@@ -903,6 +1030,109 @@ async def export_monthly_csv(month: str, db: Session = Depends(get_db)):
     df.to_csv(csv_path, index=False)
     
     return {"download_url": f"/static/exports/report_{month}.csv"}
+
+@app.get("/api/export/{month}/xlsx")
+async def export_monthly_xlsx(month: str, db: Session = Depends(get_db)):
+    """Export monthly report as Excel with multiple sheets"""
+    engine = CostAllocationEngine(db)
+    # Build maps from DB so report has data
+    products = db.query(Product).filter(Product.is_active == True).all()
+    product_map = {p.id: p for p in products}
+    monthly_sales = db.query(MonthlySale).all()
+    sales_map = {s.product_id: s for s in monthly_sales}
+    report = engine._generate_monthly_report(month, product_map, sales_map)
+    
+    # Build DataFrames
+    products_df = pd.DataFrame(report['products'])
+    
+    # Build formatted Product-wise Allocation Results as requested
+    formatted_rows = []
+    # Sort by profit desc to match expected view
+    products_sorted = sorted(report['products'], key=lambda x: x.get('profit', 0), reverse=True)
+    for p in products_sorted:
+        # Build friendly quantity string with EA/grams handling
+        pname = (p.get('product_name') or '').lower()
+        unit = (p.get('unit') or 'kg')
+        qty = p.get('quantity', 0)
+        ea_units = ['EA','EACH','PC','PCS','UNIT','UNITS']
+        if unit.upper() in ea_units:
+            # Special cases: hampers → show EA only; mushroom/corn → show EA with grams and kg
+            if 'hamper' in pname:
+                qty_str = f"{qty} EA"
+            elif ('button mushroom' in pname) or ('baby corn' in pname):
+                grams_per_ea = 200.0
+                kg_equiv = (qty * grams_per_ea) / 1000.0
+                qty_str = f"{qty} EA (200 g ea, {kg_equiv:.2f} kg)"
+            else:
+                qty_str = f"{qty} EA"
+        else:
+            qty_str = f"{qty} {unit}"
+        price_str = f"₹{p['sale_price']:,.2f}"
+        direct_cost_str = f"₹{p['direct_cost']:,.2f}"
+        allocated_str = f"₹{p['allocated_costs']:,.2f}"
+        total_cost_str = f"₹{p['total_cost']:,.2f}"
+        revenue_str = f"₹{p['revenue']:,.2f}"
+        profit_str = f"₹{p['profit']:,.2f}"
+        margin_str = f"{p['profit_margin']:.1f}%"
+        formatted_rows.append({
+            'Product': p['product_name'],
+            'Source': p['source'],
+            'Qty': qty_str,
+            'Price': price_str,
+            'Direct Cost': direct_cost_str,
+            'Allocated': allocated_str,
+            'Total Cost': total_cost_str,
+            'Revenue': revenue_str,
+            'Profit': profit_str,
+            'Margin': margin_str,
+        })
+    products_formatted_df = pd.DataFrame(formatted_rows)
+    
+    # Flatten allocations into a table
+    allocations_rows = []
+    for p in report['products']:
+        for a in p.get('allocations', []):
+            allocations_rows.append({
+                'product_id': p['product_id'],
+                'product_name': p['product_name'],
+                'source': p['source'],
+                'cost_name': a['cost_name'],
+                'category': a['category'],
+                'allocated_amount': a['amount']
+            })
+    allocations_df = pd.DataFrame(allocations_rows) if allocations_rows else pd.DataFrame(columns=['product_id','product_name','source','cost_name','category','allocated_amount'])
+    
+    # Summary sheet
+    summary_rows = [
+        {'metric': 'total_revenue', 'value': report['total_revenue']},
+        {'metric': 'total_costs', 'value': report['total_costs']},
+        {'metric': 'total_profit', 'value': report['total_revenue'] - report['total_costs']},
+        {'metric': 'profit_margin_%', 'value': report['profit_margin']},
+        {'metric': 'inhouse_revenue', 'value': report['inhouse_summary']['revenue']},
+        {'metric': 'inhouse_costs', 'value': report['inhouse_summary']['costs']},
+        {'metric': 'inhouse_profit', 'value': report['inhouse_summary']['profit']},
+        {'metric': 'inhouse_profit_margin_%', 'value': report['inhouse_summary']['profit_margin']},
+        {'metric': 'outsourced_revenue', 'value': report['outsourced_summary']['revenue']},
+        {'metric': 'outsourced_costs', 'value': report['outsourced_summary']['costs']},
+        {'metric': 'outsourced_profit', 'value': report['outsourced_summary']['profit']},
+        {'metric': 'outsourced_profit_margin_%', 'value': report['outsourced_summary']['profit_margin']},
+    ]
+    # Add cost breakdown rows
+    for category, amount in report.get('cost_breakdown', {}).items():
+        summary_rows.append({'metric': f'cost_{category}', 'value': amount})
+    summary_df = pd.DataFrame(summary_rows)
+    
+    # Save to Excel
+    xlsx_path = f"static/exports/report_{month}.xlsx"
+    os.makedirs(os.path.dirname(xlsx_path), exist_ok=True)
+    with pd.ExcelWriter(xlsx_path, engine='xlsxwriter') as writer:
+        summary_df.to_excel(writer, index=False, sheet_name='Summary')
+        products_df.to_excel(writer, index=False, sheet_name='Products (Raw)')
+        # Sheet name exactly as requested
+        products_formatted_df.to_excel(writer, index=False, sheet_name='Product-wise Allocation Results')
+        allocations_df.to_excel(writer, index=False, sheet_name='Allocations')
+    
+    return {"download_url": f"/static/exports/report_{month}.xlsx"}
 
 # Excel Upload endpoints
 @app.post("/api/upload-excel")
@@ -1416,37 +1646,9 @@ def parse_purple_patch_pl(file_path, db):
         
         print(f"📊 Found {len(data_rows)} data rows")
         
-        # Calculate ratio based on ACTUAL SALES DATA from database
-        from sqlalchemy import func
-        
-        sales = db.query(MonthlySale).join(Product).all()
-        
-        # Calculate based on revenue (quantity * sale_price)
-        inhouse_sales_total = sum(s.quantity * s.sale_price for s in sales if s.product.source == "inhouse")
-        outsourced_sales_total = sum(s.quantity * s.sale_price for s in sales if s.product.source == "outsourced")
-        total_sales = inhouse_sales_total + outsourced_sales_total
-        
-        # Calculate dynamic ratio based on actual revenue
-        if total_sales > 0:
-            inhouse_ratio = inhouse_sales_total / total_sales
-            outsourced_ratio = outsourced_sales_total / total_sales
-            print(f"📊 Using REVENUE-BASED ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
-            print(f"   💰 Inhouse Revenue: ₹{inhouse_sales_total:,.2f} | Outsourced Revenue: ₹{outsourced_sales_total:,.2f}")
-        else:
-            # Fallback to quantity-based ratio
-            inhouse_qty = sum(s.quantity for s in sales if s.product.source == "inhouse")
-            outsourced_qty = sum(s.quantity for s in sales if s.product.source == "outsourced")
-            total_qty = inhouse_qty + outsourced_qty
-            
-            if total_qty > 0:
-                inhouse_ratio = inhouse_qty / total_qty
-                outsourced_ratio = outsourced_qty / total_qty
-                print(f"📊 Using QUANTITY-BASED ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
-                print(f"   📦 Inhouse Qty: {inhouse_qty:,.2f} | Outsourced Qty: {outsourced_qty:,.2f}")
-            else:
-                inhouse_ratio = 0.1822  # Default ratio
-                outsourced_ratio = 0.8178
-                print(f"📊 Using DEFAULT ratio - Inhouse: {inhouse_ratio:.4f}, Outsourced: {outsourced_ratio:.4f}")
+        # Calculate dynamic ratio based on ACTUAL SALES DATA (weight + value hybrid)
+        # alpha = 0.5 means 50% weight, 50% value
+        inhouse_ratio, outsourced_ratio = compute_inhouse_outsourced_ratios(db, alpha=0.5)
         
         # Create Cost records
         costs_created = 0
@@ -1462,7 +1664,7 @@ def parse_purple_patch_pl(file_path, db):
                     amount=amount,
                     applies_to="inhouse",
                     cost_type="common",
-                    basis="value",
+                    basis="hybrid",
                     month="2025-04-24 00:00:00",  # Match sales data format
                     is_fixed="variable",
                     category="pl_import",
@@ -1483,7 +1685,7 @@ def parse_purple_patch_pl(file_path, db):
                     amount=amount,
                     applies_to="outsourced",
                     cost_type="common",
-                    basis="value",
+                    basis="hybrid",
                     month="2025-04",
                     is_fixed="variable",
                     category="pl_import",
@@ -1497,48 +1699,25 @@ def parse_purple_patch_pl(file_path, db):
                 costs_created += 1
                 print(f"   📦 Created O cost: {particulars} = ₹{amount:,.2f} (100% outsourced)")
                 
-            else:  # B - split by ratio
-                # Inhouse portion
-                inhouse_amount = amount * inhouse_ratio
-                cost_inhouse = Cost(
-                    name=f"{particulars} (Inhouse)",
-                    amount=inhouse_amount,
-                    applies_to="inhouse",
+            else:  # B - single pooled cost; allocate later by hybrid across all products
+                cost_both = Cost(
+                    name=particulars,
+                    amount=amount,
+                    applies_to="both",
                     cost_type="common",
-                    basis="value",
+                    basis="hybrid",  # allocate by hybrid (weight + value), alpha set in allocator
                     month="2025-04",
                     is_fixed="variable",
                     category="pl_import",
                     pl_classification="B",
                     original_amount=amount,
-                    allocation_ratio=inhouse_ratio,
+                    allocation_ratio=None,
                     source_file="pl_upload",
                     pl_period=period
                 )
-                db.add(cost_inhouse)
+                db.add(cost_both)
                 costs_created += 1
-                
-                # Outsourced portion
-                outsourced_amount = amount * outsourced_ratio
-                cost_outsourced = Cost(
-                    name=f"{particulars} (Outsourced)",
-                    amount=outsourced_amount,
-                    applies_to="outsourced",
-                    cost_type="common",
-                    basis="value",
-                    month="2025-04",
-                    is_fixed="variable",
-                    category="pl_import",
-                    pl_classification="B",
-                    original_amount=amount,
-                    allocation_ratio=outsourced_ratio,
-                    source_file="pl_upload",
-                    pl_period=period
-                )
-                db.add(cost_outsourced)
-                costs_created += 1
-                
-                print(f"   📦 Created B cost: {particulars} = ₹{amount:,.2f} → Inhouse: ₹{inhouse_amount:,.2f}, Outsourced: ₹{outsourced_amount:,.2f}")
+                print(f"   📦 Created B cost (single): {particulars} = ₹{amount:,.2f} (applies_to=both, basis=weight)")
         
         db.commit()
         

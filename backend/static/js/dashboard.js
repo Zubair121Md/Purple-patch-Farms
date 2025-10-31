@@ -4,6 +4,20 @@ let currentTab = 'dashboard';
 let charts = {};
 let currentData = {};
 
+// Quantity display formatter for EA and KG
+function formatQtyDisplay(productName, unit, quantity) {
+    const name = (productName || '').toLowerCase();
+    const u = (unit || 'kg').toUpperCase();
+    const isEA = ['EA','EACH','PC','PCS','UNIT','UNITS'].includes(u);
+    if (!isEA) return `${quantity} ${unit || 'kg'}`;
+    if (name.includes('hamper')) return `${quantity} EA`;
+    if (name.includes('button mushroom') || name.includes('baby corn')) {
+        const kg = (quantity * 200) / 1000; // 200 g per EA
+        return `${quantity} EA (200 g ea, ${kg.toFixed(2)} kg)`;
+    }
+    return `${quantity} EA`;
+}
+
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
     initializeSidebar();
@@ -447,10 +461,11 @@ function displaySales(sales) {
     
     sales.forEach(sale => {
         const revenue = sale.quantity * sale.sale_price;
+        const qtyText = formatQtyDisplay(sale.product_name, sale.product?.unit || sale.unit, sale.quantity);
         tableHTML += `
             <tr data-sale-id="${sale.id}">
                 <td><strong>${sale.product_name}</strong></td>
-                <td>${sale.quantity} kg</td>
+                <td>${qtyText}</td>
                 <td>₹${sale.sale_price}</td>
                 <td>₹${sale.direct_cost}</td>
                 <td>₹${formatNumber(revenue)}</td>
@@ -909,11 +924,12 @@ function displayAllocationResults(result) {
     `;
     
     result.products.forEach(product => {
+        const qtyText = formatQtyDisplay(product.product_name, product.unit, product.quantity);
         html += `
             <tr>
                 <td><strong>${product.product_name}</strong></td>
                 <td><span class="badge ${product.source === 'inhouse' ? 'badge-success' : 'badge-info'}">${product.source}</span></td>
-                <td>${product.quantity} kg</td>
+                <td>${qtyText}</td>
                 <td>₹${product.sale_price}</td>
                 <td>₹${formatNumber(product.direct_cost)}</td>
                 <td>₹${formatNumber(product.allocated_costs)}</td>
@@ -1051,11 +1067,12 @@ function displayReportResults(result) {
     `;
     
     result.products.forEach(product => {
+        const qtyText = formatQtyDisplay(product.product_name, product.unit, product.quantity);
         html += `
             <tr>
                 <td><strong>${product.product_name}</strong></td>
                 <td><span class="badge ${product.source === 'inhouse' ? 'badge-success' : 'badge-info'}">${product.source}</span></td>
-                <td>${product.quantity} kg</td>
+                <td>${qtyText}</td>
                 <td>₹${product.sale_price}</td>
                 <td>₹${formatNumber(product.direct_cost)}</td>
                 <td>₹${formatNumber(product.allocated_costs)}</td>

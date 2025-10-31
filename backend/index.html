@@ -918,6 +918,10 @@
                                     <i class="fas fa-calculator"></i>
                                     Run Allocation
                                 </button>
+                                <button class="btn btn-secondary" onclick="exportAllocationXLSX()">
+                                    <i class="fas fa-file-excel"></i>
+                                    Download Excel
+                                </button>
                             </div>
                         </div>
                         <div id="allocation-results">
@@ -971,7 +975,7 @@
                                 <button class="btn btn-danger" onclick="resetDatabase()" style="background: linear-gradient(135deg, #EF4444, #DC2626);">
                                     <i class="fas fa-trash-alt"></i>
                                     Reset Database
-                                </button>
+                            </button>
                             </div>
                         </div>
                     </div>
@@ -1459,8 +1463,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <script src="static/js/dashboard.js?v=20250101000001"></script>
-    <script src="static/js/upload-fix.js?v=20250101000001"></script>
+    <script src="static/js/dashboard.js?v=20250101000002"></script>
+    <script src="static/js/upload-fix.js?v=20250101000002"></script>
     
     <!-- INLINE UPLOAD FIX - This will definitely work -->
     <script>
@@ -1633,6 +1637,25 @@
     
     // Make wastage function globally available
     window.loadWastageData = loadWastageData;
+    
+    // Export Allocation as Excel
+    async function exportAllocationXLSX() {
+        try {
+            const monthSel = document.getElementById('allocation-month');
+            const month = monthSel ? encodeURIComponent(monthSel.value) : 'any';
+            const resp = await fetch(`/api/export/${month}/xlsx`);
+            const data = await resp.json();
+            if (data && data.download_url) {
+                window.location.href = data.download_url + `?t=${Date.now()}`;
+            } else {
+                alert('Export failed. Please run allocation first.');
+            }
+        } catch (e) {
+            console.error('Export error:', e);
+            alert('Export failed: ' + e.message);
+        }
+    }
+    window.exportAllocationXLSX = exportAllocationXLSX;
     
     // P&L Upload function
     async function handlePLUpload(event) {
