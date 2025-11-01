@@ -71,3 +71,6 @@ test_data.csv
 # Temporary files
 *.tmp
 *.temp
+
+# Exported files
+backend/static/exports/

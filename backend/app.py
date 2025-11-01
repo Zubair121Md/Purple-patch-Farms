@@ -522,9 +522,19 @@ class CostAllocationEngine:
         pname = (product.name or "").lower()
         unit_upper = (product.unit or "").upper() if hasattr(product, 'unit') and product.unit else ""
         is_ea = unit_upper in ['EA', 'EACH', 'PC', 'PCS', 'UNIT', 'UNITS']
+        is_hamper = "hamper" in pname
 
-        # Override: allocate by REVENUE only for hampers
-        if "hamper" in pname:
+        # Special handling for hampers:
+        # Hampers are assembled products, not directly cultivated, so:
+        # - EXCLUDED from I costs (Cultivation, Wastage-in Farm) - return 0 (no allocation)
+        # - Use REVENUE-only for all other costs (B costs, O costs)
+        if is_hamper:
+            # Check if this is an inhouse-specific cost (I classification)
+            is_inhouse_cost = cost.pl_classification == "I" if hasattr(cost, 'pl_classification') and cost.pl_classification else False
+            if is_inhouse_cost:
+                # Hampers don't consume cultivation/wastage costs - they're assembled from already-produced items
+                return 0.0
+            # For all other costs, use revenue-based allocation
             return sale.quantity * sale.sale_price
         
         if cost.basis == "weight":
@@ -548,11 +558,29 @@ class CostAllocationEngine:
                 return sale.quantity * sale.sale_price
             return sale.quantity
         elif cost.basis == "hybrid":
-            # Industry-standard hybrid allocation: 20% weight + 80% gross profit
-            # Balances resource consumption (weight) with profitability (gross profit)
-            # This is the established standard in manufacturing/agriculture
-            # Both inhouse and outsourced use the same method
+            # NEW LOGIC: Different allocation for inhouse-specific costs (I items)
+            # Get product source
+            product_source = product.source if hasattr(product, 'source') else None
+            is_inhouse = product_source == "inhouse"
             
+            # Check if this is an inhouse-specific cost (I classification like Cultivation, Wastage)
+            is_inhouse_cost = cost.pl_classification == "I" if hasattr(cost, 'pl_classification') and cost.pl_classification else False
+            
+            # For inhouse products with inhouse-specific costs (I items):
+            # Allocate by WEIGHT ONLY - these are direct production costs proportional to quantity produced
+            # Examples: Cultivation Expenses I, Wastage-in Farm (Quality Check) I, Rejection Own Farm Harvest I
+            # These costs scale directly with production volume, not profitability
+            # NOTE: For graded products (A/B/C) from same harvest, this ensures fair per-kg allocation
+            if is_inhouse and is_inhouse_cost:
+                qty_kg = _to_kg(product.name, sale.quantity, product.unit) if hasattr(product, 'unit') else sale.quantity
+                if qty_kg > 0:
+                    return qty_kg  # Pure weight-based allocation for cultivation/wastage costs
+                # Fallback to revenue if no weight conversion
+                return sale.quantity * sale.sale_price
+            
+            # For all other products (outsourced products, or inhouse products with B costs):
+            # Use standard hybrid: 20% weight + 80% gross profit
+            # This balances resource consumption with profitability for shared overhead costs
             # Weight part (20%): Use ACTUAL weight in kg (with EA→kg conversion where applicable)
             qty_kg = _to_kg(product.name, sale.quantity, product.unit) if hasattr(product, 'unit') else sale.quantity
             weight_part = qty_kg
@@ -561,6 +589,11 @@ class CostAllocationEngine:
             revenue = sale.quantity * sale.sale_price
             direct_cost = sale.direct_cost or 0.0
             gross_profit = max(0.0, revenue - direct_cost)  # Ensure non-negative
+            
+            # IMPORTANT: For inhouse products, if direct_cost is 0, gross_profit = revenue
+            # This means high-revenue products (like A Grade) get 80% of allocation based on revenue
+            # Lower-revenue products (like C Grade) get penalized even if they're same product family
+            # Current logic: 20% weight + 80% revenue (since direct_cost = 0 for inhouse)
             
             # Combined basis: 20% weight + 80% gross profit
             # Weight and profit are on different scales, but this creates fair balance
@@ -835,10 +868,11 @@ async def create_monthly_sale(sale: MonthlySaleCreate, db: Session = Depends(get
     db.commit()
     db.refresh(db_sale)
     
-    # Add product name to response
+    # Add product name and unit to response
     sale_response = MonthlySaleResponse(
         **db_sale.__dict__,
-        product_name=product.name
+        product_name=product.name,
+        unit=getattr(product, 'unit', 'kg')  # Get unit from product, default to 'kg'
     )
     return sale_response
 
@@ -911,11 +945,12 @@ async def get_sale_by_id(sale_id: int, db: Session = Depends(get_db)):
         print(f"DEBUG: Sale not found for ID {sale_id}")
         raise HTTPException(status_code=404, detail="Sales record not found")
     
-    # Add product name to response
+    # Add product name and unit to response
     product = db.query(Product).filter(Product.id == sale.product_id).first()
     sale_response = MonthlySaleResponse(
         **sale.__dict__,
-        product_name=product.name if product else "Unknown"
+        product_name=product.name if product else "Unknown",
+        unit=product.unit if product and getattr(product, 'unit', None) else 'kg'
     )
     print(f"DEBUG: Returning sale: {sale_response}")
     return sale_response
